@@ -1260,15 +1260,18 @@ function MatchView({ team, matchId, onBack, onOpenPlayer, onSelectTeam }) {
   const [sortKey, setSortKey] = useState('pts');
   const [sortDir, setSortDir] = useState('desc');
   const [showShare, setShowShare] = useState(false);
-  const roster = ROSTERS[team.id];
   const match = LEAGUE[team.id].matches.find((m) => m.id === matchId);
-  const totals = useMemo(() => getTeamTotals(match), [match]);
-  const rows = useMemo(() => {
-    const withNames = match.players.map((ps) => ({ ...ps, player: roster.find((p) => p.id === ps.playerId) }));
-    return withNames.sort((a, b) => (sortDir === 'desc' ? b[sortKey] - a[sortKey] : a[sortKey] - b[sortKey]));
-  }, [match, sortKey, sortDir]);
   const homeTeamId = match.isHome ? team.id : match.opponentTeamId;
   const awayTeamId = match.isHome ? match.opponentTeamId : team.id;
+  const [statsTeamId, setStatsTeamId] = useState(team.id);
+
+  const totals = useMemo(() => getTeamTotals(match), [match]);
+  const statsMatch = statsTeamId === team.id ? match : LEAGUE[statsTeamId].matches.find((m) => m.id === matchId);
+  const statsRoster = ROSTERS[statsTeamId];
+  const rows = useMemo(() => {
+    const withNames = statsMatch.players.map((ps) => ({ ...ps, player: statsRoster.find((p) => p.id === ps.playerId) }));
+    return withNames.sort((a, b) => (sortDir === 'desc' ? b[sortKey] - a[sortKey] : a[sortKey] - b[sortKey]));
+  }, [statsMatch, statsRoster, sortKey, sortDir]);
 
   const scoreColumns = [
     { key: 'effectiveMin', label: 'MIN' },
@@ -1344,6 +1347,14 @@ function MatchView({ team, matchId, onBack, onOpenPlayer, onSelectTeam }) {
       </div>
 
       <h2 className="p4t-section-title">Stats individuelles</h2>
+      <div className="p4t-comp-filter">
+        <button className={`p4t-comp-filter-btn ${statsTeamId === homeTeamId ? 'p4t-comp-filter-btn-active' : ''}`} onClick={() => setStatsTeamId(homeTeamId)}>
+          {teamName(homeTeamId)}
+        </button>
+        <button className={`p4t-comp-filter-btn ${statsTeamId === awayTeamId ? 'p4t-comp-filter-btn-active' : ''}`} onClick={() => setStatsTeamId(awayTeamId)}>
+          {teamName(awayTeamId)}
+        </button>
+      </div>
       <div className="p4t-table-wrap">
         <table className="p4t-table">
           <thead>
@@ -1361,7 +1372,7 @@ function MatchView({ team, matchId, onBack, onOpenPlayer, onSelectTeam }) {
           </thead>
           <tbody>
             {rows.map((r) => (
-              <tr key={r.playerId} onClick={() => onOpenPlayer(r.playerId)} className="p4t-tr-click">
+              <tr key={r.playerId} onClick={() => onOpenPlayer(statsTeamId, r.playerId)} className="p4t-tr-click">
                 <td className="p4t-td-name">
                   <span className="p4t-avatar p4t-avatar-sm">{initials(r.player.name)}</span>
                   <span>{r.player.name}<span className="p4t-number">#{r.player.number}</span></span>
@@ -1381,7 +1392,7 @@ function MatchView({ team, matchId, onBack, onOpenPlayer, onSelectTeam }) {
       </div>
 
       {showShare && (
-        <MatchShareModal match={match} roster={roster} onClose={() => setShowShare(false)} />
+        <MatchShareModal match={match} roster={ROSTERS[team.id]} onClose={() => setShowShare(false)} />
       )}
     </>
   );
@@ -1557,6 +1568,16 @@ function PlayerView({ team, playerId, onBack, onSelectTeam, onCompare }) {
   const career = useMemo(() => getPlayerCareer(team.id, playerId), [team.id, playerId]);
   const rank = useMemo(() => getPlayerRank(team.id, playerId), [team.id, playerId]);
   const seasonBests = useMemo(() => getPlayerSeasonBests(team.id, playerId), [team.id, playerId]);
+  const totals = useMemo(() => history.reduce((acc, h) => ({
+    min: acc.min + h.effectiveMin,
+    pts: acc.pts + h.pts,
+    reb: acc.reb + h.reb,
+    ast: acc.ast + h.ast,
+    fg2: acc.fg2 + h.fg2Made,
+    fg3: acc.fg3 + h.fg3Made,
+    pf: acc.pf + h.fouls,
+    pm: acc.pm + h.plusMinus,
+  }), { min: 0, pts: 0, reb: 0, ast: 0, fg2: 0, fg3: 0, pf: 0, pm: 0 }), [history]);
   const chartData = history.map((h) => ({ match: formatDate(h.date).replace(/ \d{4}$/, ''), Points: h.pts, opponent: h.opponent }));
   const [showShare, setShowShare] = useState(false);
 
@@ -1578,7 +1599,7 @@ function PlayerView({ team, playerId, onBack, onSelectTeam, onCompare }) {
           )}
         </div>
       </div>
-      <button className="p4t-share-btn" onClick={() => onCompare(team.id, playerId)}><Users size={14} /> Comparer avec un autre joueur →</button>
+      <button className="p4t-share-btn p4t-compare-btn" onClick={() => onCompare(team.id, playerId)}><Users size={14} /> Comparer avec un autre joueur →</button>
 
       <div className="p4t-tile-row">
         <Tile icon={Users} value={career.matchesPlayed} unit="" label="Matchs joués" />
@@ -1587,10 +1608,6 @@ function PlayerView({ team, playerId, onBack, onSelectTeam, onCompare }) {
         <Tile icon={Layers} value={career.rpg} unit="" label="Rebonds/match" />
         <Tile icon={Share2} value={career.apg} unit="" label="Passes déc./match" />
         <Tile icon={TrendingUp} value={<span className={pmClass(career.avgPlusMinus)}>{formatPM(career.avgPlusMinus)}</span>} unit="" label="+/- moyen" />
-      </div>
-
-      <div className="p4t-season-summary">
-        <strong>{career.totalPoints}</strong> points · <strong>{career.totalReb}</strong> rebonds · <strong>{career.totalAst}</strong> passes déc. au total cette saison
       </div>
 
       <h2 className="p4t-section-title">Évolution</h2>
@@ -1661,6 +1678,20 @@ function PlayerView({ team, playerId, onBack, onSelectTeam, onCompare }) {
               </tr>
             ))}
           </tbody>
+          <tfoot>
+            <tr className="p4t-table-total-row">
+              <td className="p4t-td-name">Total saison</td>
+              <td>—</td>
+              <td>{totals.min}</td>
+              <td>{totals.pts}</td>
+              <td>{totals.reb}</td>
+              <td>{totals.ast}</td>
+              <td>{totals.fg2}</td>
+              <td>{totals.fg3}</td>
+              <td>{totals.pf}</td>
+              <td className={pmClass(totals.pm)}>{formatPM(totals.pm)}</td>
+            </tr>
+          </tfoot>
         </table>
       </div>
 
@@ -1907,8 +1938,7 @@ function MatchDetailView({ matchId, onBack, onOpenPlayer, onSelectTeam }) {
   const fixture = FIXTURES.find((f) => f.id === matchId);
   const homeMatch = LEAGUE[fixture.homeTeamId].matches.find((m) => m.id === matchId);
   const awayMatch = LEAGUE[fixture.awayTeamId].matches.find((m) => m.id === matchId);
-  const homeRoster = ROSTERS[fixture.homeTeamId];
-  const awayRoster = ROSTERS[fixture.awayTeamId];
+  const [statsTeamId, setStatsTeamId] = useState(fixture.homeTeamId);
 
   const columns = [
     { key: 'effectiveMin', label: 'MIN' },
@@ -1921,44 +1951,13 @@ function MatchDetailView({ matchId, onBack, onOpenPlayer, onSelectTeam }) {
     { key: 'plusMinus', label: '+/-' },
   ];
 
-  const renderTeamStats = (teamId, teamMatch, roster) => {
-    const rows = teamMatch.players
-      .map((ps) => ({ ...ps, player: roster.find((p) => p.id === ps.playerId) }))
+  const statsMatch = statsTeamId === fixture.homeTeamId ? homeMatch : awayMatch;
+  const statsRoster = ROSTERS[statsTeamId];
+  const rows = useMemo(() => {
+    return statsMatch.players
+      .map((ps) => ({ ...ps, player: statsRoster.find((p) => p.id === ps.playerId) }))
       .sort((a, b) => b.pts - a.pts);
-    return (
-      <div key={teamId}>
-        <h2 className="p4t-section-title">Stats individuelles — <TeamLink teamId={teamId} name={teamName(teamId)} onSelectTeam={onSelectTeam} /></h2>
-        <div className="p4t-table-wrap">
-          <table className="p4t-table">
-            <thead>
-              <tr>
-                <th className="p4t-th-name">Joueur</th>
-                {columns.map((c) => <th key={c.key}>{c.label}</th>)}
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((r) => (
-                <tr key={r.playerId} onClick={() => onOpenPlayer(teamId, r.playerId)} className="p4t-tr-click">
-                  <td className="p4t-td-name">
-                    <span className="p4t-avatar p4t-avatar-sm">{initials(r.player.name)}</span>
-                    <span>{r.player.name}<span className="p4t-number">#{r.player.number}</span></span>
-                  </td>
-                  <td>{r.effectiveMin}</td>
-                  <td>{r.pts}</td>
-                  <td>{r.reb}</td>
-                  <td>{r.ast}</td>
-                  <td>{r.fg2Made}</td>
-                  <td>{r.fg3Made}</td>
-                  <td>{r.fouls}</td>
-                  <td className={pmClass(r.plusMinus)}>{formatPM(r.plusMinus)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    );
-  };
+  }, [statsMatch, statsRoster]);
 
   return (
     <>
@@ -2003,8 +2002,43 @@ function MatchDetailView({ matchId, onBack, onOpenPlayer, onSelectTeam }) {
           </table>
         </div>
 
-        {renderTeamStats(fixture.homeTeamId, homeMatch, homeRoster)}
-        {renderTeamStats(fixture.awayTeamId, awayMatch, awayRoster)}
+        <h2 className="p4t-section-title">Stats individuelles</h2>
+        <div className="p4t-comp-filter">
+          <button className={`p4t-comp-filter-btn ${statsTeamId === fixture.homeTeamId ? 'p4t-comp-filter-btn-active' : ''}`} onClick={() => setStatsTeamId(fixture.homeTeamId)}>
+            {teamName(fixture.homeTeamId)}
+          </button>
+          <button className={`p4t-comp-filter-btn ${statsTeamId === fixture.awayTeamId ? 'p4t-comp-filter-btn-active' : ''}`} onClick={() => setStatsTeamId(fixture.awayTeamId)}>
+            {teamName(fixture.awayTeamId)}
+          </button>
+        </div>
+        <div className="p4t-table-wrap">
+          <table className="p4t-table">
+            <thead>
+              <tr>
+                <th className="p4t-th-name">Joueur</th>
+                {columns.map((c) => <th key={c.key}>{c.label}</th>)}
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r) => (
+                <tr key={r.playerId} onClick={() => onOpenPlayer(statsTeamId, r.playerId)} className="p4t-tr-click">
+                  <td className="p4t-td-name">
+                    <span className="p4t-avatar p4t-avatar-sm">{initials(r.player.name)}</span>
+                    <span>{r.player.name}<span className="p4t-number">#{r.player.number}</span></span>
+                  </td>
+                  <td>{r.effectiveMin}</td>
+                  <td>{r.pts}</td>
+                  <td>{r.reb}</td>
+                  <td>{r.ast}</td>
+                  <td>{r.fg2Made}</td>
+                  <td>{r.fg3Made}</td>
+                  <td>{r.fouls}</td>
+                  <td className={pmClass(r.plusMinus)}>{formatPM(r.plusMinus)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
     </>
   );
@@ -2628,7 +2662,7 @@ function PlayerComparisonView({ teamIdA, playerIdA, onBack, onOpenPlayer, onSele
   );
 }
 
-function TeamApp({ team, initialView, initialMatchId, initialPlayerId, onSelectTeam, onCompare }) {
+function TeamApp({ team, initialView, initialMatchId, initialPlayerId, onSelectTeam, onCompare, onGoHome, onOpenAnyPlayer }) {
   const [view, setView] = useState(initialView || 'matches');
   const [selectedMatchId, setSelectedMatchId] = useState(initialMatchId || null);
   const [selectedPlayerId, setSelectedPlayerId] = useState(initialPlayerId || null);
@@ -2651,9 +2685,10 @@ function TeamApp({ team, initialView, initialMatchId, initialPlayerId, onSelectT
       </div>
 
       <div className="p4t-main">
+        <button className="p4t-back-btn" onClick={onGoHome}><ArrowLeft size={15} /> Accueil</button>
         {view === 'matches' && <MatchesView team={team} onOpenMatch={openMatch} onSelectTeam={onSelectTeam} onOpenPlayer={openPlayer} />}
         {view === 'calendar' && <TeamCalendarView team={team} onOpenMatch={openMatch} onSelectTeam={onSelectTeam} onOpenPlayer={openPlayer} />}
-        {view === 'match' && <MatchView team={team} matchId={selectedMatchId} onBack={() => setView('matches')} onOpenPlayer={openPlayer} onSelectTeam={onSelectTeam} />}
+        {view === 'match' && <MatchView team={team} matchId={selectedMatchId} onBack={() => setView('matches')} onOpenPlayer={onOpenAnyPlayer} onSelectTeam={onSelectTeam} />}
         {view === 'players' && <PlayersView team={team} onOpenPlayer={openPlayer} />}
         {view === 'player' && <PlayerView team={team} playerId={selectedPlayerId} onBack={() => setView('players')} onSelectTeam={onSelectTeam} onCompare={onCompare} />}
       </div>
@@ -3100,6 +3135,7 @@ export default function App() {
           color: var(--red); font-size: 12.5px; font-weight: 600; padding: 7px 12px; border-radius: 8px;
         }
         .p4t-share-btn:hover { border-color: var(--red); background: var(--panel); }
+        .p4t-compare-btn { margin: 16px 0 20px; }
 
         .p4t-modal-overlay {
           position: fixed; inset: 0; background: rgba(10,10,10,0.72); display: flex; align-items: center;
@@ -3199,6 +3235,10 @@ export default function App() {
         .p4t-table .p4t-th-name { text-align: left; }
         .p4t-table td { text-align: right; padding: 10px 14px; border-bottom: 1px solid var(--line); font-family: var(--font-mono); font-size: 12.5px; }
         .p4t-table tr:last-child td { border-bottom: none; }
+        .p4t-table-total-row td {
+          background: var(--panel); font-weight: 700; border-top: 2px solid var(--line); border-bottom: none;
+        }
+        .p4t-table-total-row .p4t-td-name { font-family: var(--font-body) !important; }
         .p4t-quarters-table { min-width: 460px; }
         .p4t-quarters-total { color: var(--red); font-weight: 700; }
         .p4t-td-name { text-align: left !important; font-family: var(--font-body) !important; display: flex; align-items: center; gap: 9px; }
@@ -3244,8 +3284,6 @@ export default function App() {
           display: inline-flex; align-items: center; gap: 6px; margin-top: 8px; font-size: 12px; font-weight: 600;
           color: var(--red); background: rgba(214,64,46,0.08); padding: 5px 10px; border-radius: 7px;
         }
-        .p4t-season-summary { font-size: 12.5px; color: var(--ink-dim); margin: 14px 0 0; }
-        .p4t-season-summary strong { color: var(--ink); font-family: var(--font-mono); font-weight: 700; }
 
         .p4t-chart-panel { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; }
 
@@ -3335,6 +3373,8 @@ export default function App() {
           initialPlayerId={teamEntry.playerId}
           onSelectTeam={selectTeam}
           onCompare={showCompare}
+          onGoHome={goHome}
+          onOpenAnyPlayer={openPlayerFromHome}
         />
       )}
       {screen === 'team' && selectedTeam && !selectedTeam.hasData && (
