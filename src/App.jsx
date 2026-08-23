@@ -4,7 +4,7 @@ import {
 } from 'recharts';
 import {
   Search, ArrowLeft, Users, TrendingUp, Zap, Footprints, Clock, Target, X,
-  ChevronUp, ChevronDown, ChevronLeft, ChevronRight, Layers, Share2, Wind, Activity, Flame, Star, Shield, Shuffle, Play, Download,
+  ChevronUp, ChevronDown, ChevronLeft, ChevronRight, Layers, Share2, Wind, Activity, Flame, Star, Shield, Shuffle, Trophy, Play, Download,
 } from 'lucide-react';
 
 /* =========================================================================
@@ -457,6 +457,32 @@ function getPlayerCareer(teamId, playerId) {
     totalSprints: sum('sprints'),
   };
 }
+function ordinalFr(n) {
+  return n === 1 ? '1er' : `${n}e`;
+}
+
+// Classement d'un joueur au sein de SA compétition (même division/genre),
+// sur les points par match — sert au badge "3e meilleur marqueur" sur sa fiche.
+function getPlayerRank(teamId, playerId) {
+  const team = TEAMS.find((t) => t.id === teamId);
+  const competitionTeams = TEAMS.filter((t) => t.competitionId === team.competitionId);
+  const rows = competitionTeams
+    .flatMap((t) => ROSTERS[t.id].map((p) => ({ teamId: t.id, playerId: p.id, ppg: getPlayerCareer(t.id, p.id).ppg, matchesPlayed: getPlayerCareer(t.id, p.id).matchesPlayed })))
+    .filter((r) => r.matchesPlayed > 0)
+    .sort((a, b) => b.ppg - a.ppg);
+  const rank = rows.findIndex((r) => r.teamId === teamId && r.playerId === playerId) + 1;
+  if (rank === 0) return null;
+  return { rank, total: rows.length, competitionId: team.competitionId };
+}
+
+// Record personnel du joueur — sa meilleure perf en points sur UN match de
+// la saison (pas le record de la ligue, le sien à lui).
+function getPlayerBest(teamId, playerId) {
+  const hist = getPlayerHistory(teamId, playerId);
+  if (hist.length === 0) return null;
+  return hist.reduce((a, b) => (b.pts > a.pts ? b : a));
+}
+
 function getTeamTotals(match) {
   const n = match.players.length;
   const sum = (k) => match.players.reduce((a, p) => a + p[k], 0);
@@ -1524,6 +1550,8 @@ function PlayerView({ team, playerId, onBack, onSelectTeam, onCompare }) {
   const player = roster.find((p) => p.id === playerId);
   const history = useMemo(() => getPlayerHistory(team.id, playerId), [team.id, playerId]);
   const career = useMemo(() => getPlayerCareer(team.id, playerId), [team.id, playerId]);
+  const rank = useMemo(() => getPlayerRank(team.id, playerId), [team.id, playerId]);
+  const personalBest = useMemo(() => getPlayerBest(team.id, playerId), [team.id, playerId]);
   const chartData = history.map((h) => ({ match: formatDate(h.date).replace(/ \d{4}$/, ''), Points: h.pts, opponent: h.opponent }));
   const [showShare, setShowShare] = useState(false);
 
@@ -1538,6 +1566,11 @@ function PlayerView({ team, playerId, onBack, onSelectTeam, onCompare }) {
         <div>
           <h1 className="p4t-profile-name">{player.name}<span className="p4t-number">#{player.number}</span></h1>
           <p className="p4t-profile-pos">{player.position} · <TeamLink teamId={team.id} name={team.name} onSelectTeam={onSelectTeam} /></p>
+          {rank && (
+            <div className="p4t-profile-rank">
+              <Trophy size={13} /> {ordinalFr(rank.rank)} meilleur marqueur · {competitionLabel(rank.competitionId)}
+            </div>
+          )}
         </div>
       </div>
       <button className="p4t-share-btn" onClick={() => onCompare(team.id, playerId)}><Users size={14} /> Comparer avec un autre joueur →</button>
@@ -1550,6 +1583,15 @@ function PlayerView({ team, playerId, onBack, onSelectTeam, onCompare }) {
         <Tile icon={Share2} value={career.apg} unit="" label="Passes déc./match" />
         <Tile icon={TrendingUp} value={<span className={pmClass(career.avgPlusMinus)}>{formatPM(career.avgPlusMinus)}</span>} unit="" label="+/- moyen" />
       </div>
+
+      <div className="p4t-season-summary">
+        <strong>{career.totalPoints}</strong> points · <strong>{career.totalReb}</strong> rebonds · <strong>{career.totalAst}</strong> passes déc. au total cette saison
+      </div>
+      {personalBest && (
+        <div className="p4t-personal-best">
+          <Star size={13} /> Record perso : <strong>{personalBest.pts} pts</strong> · vs {personalBest.opponent} · {formatDate(personalBest.date)}
+        </div>
+      )}
 
       <h2 className="p4t-section-title">Évolution</h2>
       <div className="p4t-chart-panel">
@@ -2587,6 +2629,8 @@ function TeamApp({ team, initialView, initialMatchId, initialPlayerId, onSelectT
   const [selectedMatchId, setSelectedMatchId] = useState(initialMatchId || null);
   const [selectedPlayerId, setSelectedPlayerId] = useState(initialPlayerId || null);
 
+  useEffect(() => { window.scrollTo(0, 0); }, [view]);
+
   const openMatch = (id) => { setSelectedMatchId(id); setView('match'); };
   const openPlayer = (id) => { setSelectedPlayerId(id); setView('player'); };
 
@@ -2624,6 +2668,8 @@ export default function App() {
   const [neutralMatchId, setNeutralMatchId] = useState(null);
   const [weekMatchId, setWeekMatchId] = useState(null);
   const [compareA, setCompareA] = useState(null);
+
+  useEffect(() => { window.scrollTo(0, 0); }, [screen, selectedTeamId, neutralMatchId]);
 
   const goHome = () => setScreen('home');
   const showAllMatches = () => setScreen('allMatches');
@@ -3189,6 +3235,14 @@ export default function App() {
         .p4t-profile-header { display: flex; align-items: center; gap: 16px; margin-bottom: 22px; }
         .p4t-profile-name { font-family: var(--font-display); font-size: 26px; font-weight: 600; margin: 0; }
         .p4t-profile-pos { color: var(--ink-dim); font-size: 13px; margin: 2px 0 0; }
+        .p4t-profile-rank {
+          display: inline-flex; align-items: center; gap: 6px; margin-top: 8px; font-size: 12px; font-weight: 600;
+          color: var(--red); background: rgba(214,64,46,0.08); padding: 5px 10px; border-radius: 7px;
+        }
+        .p4t-season-summary { font-size: 12.5px; color: var(--ink-dim); margin: 14px 0 0; }
+        .p4t-season-summary strong { color: var(--ink); font-family: var(--font-mono); font-weight: 700; }
+        .p4t-personal-best { display: flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--ink-dim); margin: 6px 0 20px; }
+        .p4t-personal-best strong { color: var(--red); font-family: var(--font-mono); font-weight: 700; }
 
         .p4t-chart-panel { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; }
 
