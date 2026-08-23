@@ -475,12 +475,16 @@ function getPlayerRank(teamId, playerId) {
   return { rank, total: rows.length, competitionId: team.competitionId };
 }
 
-// Record personnel du joueur — sa meilleure perf en points sur UN match de
-// la saison (pas le record de la ligue, le sien à lui).
-function getPlayerBest(teamId, playerId) {
+// Records personnels du joueur — sa meilleure perf sur UN match de la
+// saison, pour chaque catégorie (pas le record de la ligue, le sien à lui).
+function getPlayerSeasonBests(teamId, playerId) {
   const hist = getPlayerHistory(teamId, playerId);
   if (hist.length === 0) return null;
-  return hist.reduce((a, b) => (b.pts > a.pts ? b : a));
+  return {
+    pts: hist.reduce((a, b) => (b.pts > a.pts ? b : a)),
+    reb: hist.reduce((a, b) => (b.reb > a.reb ? b : a)),
+    ast: hist.reduce((a, b) => (b.ast > a.ast ? b : a)),
+  };
 }
 
 function getTeamTotals(match) {
@@ -708,7 +712,7 @@ const HIGHLIGHTS = [
    PETITS COMPOSANTS
    ========================================================================= */
 
-function Tile({ icon: Icon, value, unit, label, variant = 'primary' }) {
+function Tile({ icon: Icon, value, unit, label, sub, variant = 'primary' }) {
   return (
     <div className={`p4t-tile p4t-tile-${variant}`}>
       {variant === 'primary' && (
@@ -720,6 +724,7 @@ function Tile({ icon: Icon, value, unit, label, variant = 'primary' }) {
       <Icon size={variant === 'primary' ? 16 : 13} className="p4t-tile-icon" />
       <div className="p4t-tile-value">{value}<span className="p4t-tile-unit">{unit}</span></div>
       <div className="p4t-tile-label">{label}</div>
+      {sub && <div className="p4t-tile-sub">{sub}</div>}
     </div>
   );
 }
@@ -1551,7 +1556,7 @@ function PlayerView({ team, playerId, onBack, onSelectTeam, onCompare }) {
   const history = useMemo(() => getPlayerHistory(team.id, playerId), [team.id, playerId]);
   const career = useMemo(() => getPlayerCareer(team.id, playerId), [team.id, playerId]);
   const rank = useMemo(() => getPlayerRank(team.id, playerId), [team.id, playerId]);
-  const personalBest = useMemo(() => getPlayerBest(team.id, playerId), [team.id, playerId]);
+  const seasonBests = useMemo(() => getPlayerSeasonBests(team.id, playerId), [team.id, playerId]);
   const chartData = history.map((h) => ({ match: formatDate(h.date).replace(/ \d{4}$/, ''), Points: h.pts, opponent: h.opponent }));
   const [showShare, setShowShare] = useState(false);
 
@@ -1587,11 +1592,6 @@ function PlayerView({ team, playerId, onBack, onSelectTeam, onCompare }) {
       <div className="p4t-season-summary">
         <strong>{career.totalPoints}</strong> points · <strong>{career.totalReb}</strong> rebonds · <strong>{career.totalAst}</strong> passes déc. au total cette saison
       </div>
-      {personalBest && (
-        <div className="p4t-personal-best">
-          <Star size={13} /> Record perso : <strong>{personalBest.pts} pts</strong> · vs {personalBest.opponent} · {formatDate(personalBest.date)}
-        </div>
-      )}
 
       <h2 className="p4t-section-title">Évolution</h2>
       <div className="p4t-chart-panel">
@@ -1612,14 +1612,18 @@ function PlayerView({ team, playerId, onBack, onSelectTeam, onCompare }) {
         </div>
       </div>
 
-      <SubsectionTitle>Données de mouvement · PIX4TEAM 2</SubsectionTitle>
-      <div className="p4t-secondary-panel">
-        <div className="p4t-tile-row p4t-tile-row-compact">
-          <Tile variant="secondary" icon={Footprints} value={career.totalDistance} unit="km" label="Distance cumulée" />
-          <Tile variant="secondary" icon={Zap} value={career.avgMaxSpeed} unit="km/h" label="Vitesse max moy." />
-          <Tile variant="secondary" icon={Wind} value={career.totalSprints} unit="" label="Sprints cumulés" />
-        </div>
-      </div>
+      {seasonBests && (
+        <>
+          <SubsectionTitle>Records de la saison</SubsectionTitle>
+          <div className="p4t-secondary-panel">
+            <div className="p4t-tile-row p4t-tile-row-compact">
+              <Tile variant="secondary" icon={Target} value={seasonBests.pts.pts} unit="" label="Points" sub={`vs ${seasonBests.pts.opponent}`} />
+              <Tile variant="secondary" icon={Layers} value={seasonBests.reb.reb} unit="" label="Rebonds" sub={`vs ${seasonBests.reb.opponent}`} />
+              <Tile variant="secondary" icon={Share2} value={seasonBests.ast.ast} unit="" label="Passes déc." sub={`vs ${seasonBests.ast.opponent}`} />
+            </div>
+          </div>
+        </>
+      )}
 
       <h2 className="p4t-section-title">Historique des matchs</h2>
       <div className="p4t-table-wrap">
@@ -3187,6 +3191,7 @@ export default function App() {
         .p4t-tile-unit { font-size: 12px; color: var(--ink-dim); margin-left: 3px; }
         .p4t-tile-label { font-size: 11px; color: var(--ink-dim); margin-top: 6px; text-transform: uppercase; letter-spacing: 0.03em; }
         .p4t-tile-secondary .p4t-tile-label { font-size: 9.5px; margin-top: 4px; }
+        .p4t-tile-sub { font-size: 9.5px; color: var(--ink-dim); margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
         .p4t-table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 12px; }
         .p4t-table { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 560px; }
@@ -3241,8 +3246,6 @@ export default function App() {
         }
         .p4t-season-summary { font-size: 12.5px; color: var(--ink-dim); margin: 14px 0 0; }
         .p4t-season-summary strong { color: var(--ink); font-family: var(--font-mono); font-weight: 700; }
-        .p4t-personal-best { display: flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--ink-dim); margin: 6px 0 20px; }
-        .p4t-personal-best strong { color: var(--red); font-family: var(--font-mono); font-weight: 700; }
 
         .p4t-chart-panel { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; }
 
