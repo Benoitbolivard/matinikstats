@@ -2715,7 +2715,6 @@ export default function App() {
           display: flex; align-items: center; gap: 20px;
           padding: 14px 24px; border-bottom: 1px solid var(--line);
           background: rgba(252,252,250,0.9); position: sticky; top: 0; z-index: 20;
-          flex-wrap: wrap;
         }
         .p4t-home-btn {
           background: none; border: none; color: var(--ink-dim); display: flex; align-items: center;
@@ -2724,13 +2723,17 @@ export default function App() {
         .p4t-home-btn:hover { color: var(--ink); background: var(--panel); }
         .p4t-nav-brand {
           font-family: var(--font-display); font-weight: 600; letter-spacing: 0.04em;
-          font-size: 17px; display: flex; align-items: center; gap: 8px; margin-right: auto;
+          font-size: 17px; display: flex; align-items: center; gap: 8px; margin-right: auto; flex-shrink: 0;
         }
         .p4t-nav-brand-click { cursor: pointer; }
         .p4t-nav-brand-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--red); }
         .p4t-nav-team-sep { color: var(--ink-dim); margin: 0 2px; opacity: 0.5; font-weight: 400; }
         .p4t-nav-team-name { color: var(--ink-dim); font-weight: 500; font-size: 14px; letter-spacing: 0; }
-        .p4t-nav-tabs { display: flex; gap: 4px; }
+        .p4t-nav-tabs {
+          display: flex; gap: 4px; overflow-x: auto; min-width: 0; flex-shrink: 1;
+          scrollbar-width: none; -ms-overflow-style: none;
+        }
+        .p4t-nav-tabs::-webkit-scrollbar { display: none; }
         .p4t-subnav {
           display: flex; align-items: center; gap: 20px; padding: 12px 24px; border-bottom: 1px solid var(--line);
           background: var(--panel); flex-wrap: wrap;
@@ -2741,7 +2744,7 @@ export default function App() {
         }
         .p4t-tab {
           background: none; border: none; color: var(--ink-dim); font-size: 13px; font-weight: 500;
-          padding: 7px 12px; border-radius: 7px; transition: all .15s;
+          padding: 7px 12px; border-radius: 7px; transition: all .15s; flex-shrink: 0; white-space: nowrap;
         }
         .p4t-tab:hover { color: var(--ink); background: var(--panel); }
         .p4t-tab-active { color: var(--bg); background: var(--red); }
