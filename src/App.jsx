@@ -289,121 +289,58 @@ function venueName(homeTeamId) {
    CALENDRIER — une seule liste de rencontres, source unique de vérité
    ========================================================================= */
 
+// Construit, pour une liste de clubs d'une même compétition, un calendrier
+// complet : deux tournées jouées avec score, une troisième à venir sans
+// score. Réutilisé séparément pour chaque compétition (R1/R2 masculin,
+// féminin) afin qu'aucun match ne mélange deux compétitions différentes.
+function buildDivisionFixtures(ids, prefix, playedStartDate, upcomingStartDate, scoreRange = [58, 90]) {
+  const n = ids.length;
+  const playedPairs = [];
+  for (let i = 0; i < n; i++) playedPairs.push([i, (i + 1) % n]);
+  for (let i = 0; i < n; i++) playedPairs.push([i, (i + 2) % n]);
+  const playedStart = new Date(playedStartDate);
+  const [lo, hi] = scoreRange;
+  const playedFixtures = playedPairs.map((pair, idx) => {
+    const id = `${prefix}p${idx + 1}`;
+    const homeTeamId = ids[pair[0]];
+    const awayTeamId = ids[pair[1]];
+    const rand = mulberry32(strHash(id + '-score'));
+    let homeScore = lo + Math.round(rand() * (hi - lo));
+    let awayScore = lo + Math.round(rand() * (hi - lo));
+    if (homeScore === awayScore) homeScore += 1;
+    const d = new Date(playedStart.getTime() + idx * 4 * 24 * 3600 * 1000);
+    const date = d.toISOString().slice(0, 10);
+    return { id, date, homeTeamId, awayTeamId, homeScore, awayScore };
+  });
+
+  const upcomingPairs = [];
+  for (let i = 0; i < n; i++) upcomingPairs.push([i, (i + 3) % n]);
+  const upcomingStart = new Date(upcomingStartDate);
+  const upcomingFixtures = upcomingPairs.map((pair, idx) => {
+    const id = `${prefix}u${idx + 1}`;
+    const homeTeamId = ids[pair[0]];
+    const awayTeamId = ids[pair[1]];
+    const d = new Date(upcomingStart.getTime() + idx * 3 * 24 * 3600 * 1000);
+    const date = d.toISOString().slice(0, 10);
+    return { id, date, homeTeamId, awayTeamId };
+  });
+
+  return [...playedFixtures, ...upcomingFixtures];
+}
+
 const FIXTURES = [
-  { id: 'm1',  date: '2025-10-11', homeTeamId: 'trident',  awayTeamId: 'etoile',    homeScore: 78, awayScore: 65 },
-  { id: 'm2',  date: '2025-10-25', homeTeamId: 'trident',  awayTeamId: 'requins',   homeScore: 71, awayScore: 74 },
-  { id: 'm3',  date: '2025-11-08', homeTeamId: 'trident',  awayTeamId: 'zandoli',   homeScore: 85, awayScore: 79 },
-  { id: 'm4',  date: '2025-11-22', homeTeamId: 'trident',  awayTeamId: 'ouragan',   homeScore: 69, awayScore: 72 },
-  { id: 'm5',  date: '2025-12-13', homeTeamId: 'trident',  awayTeamId: 'kalinago',  homeScore: 91, awayScore: 83 },
-  { id: 'm6',  date: '2026-01-17', homeTeamId: 'trident',  awayTeamId: 'soufriere', homeScore: 80, awayScore: 77 },
-  { id: 'lm1', date: '2026-01-20', homeTeamId: 'zandoli',  awayTeamId: 'requins',   homeScore: 74, awayScore: 70 },
-  { id: 'lm2', date: '2026-01-05', homeTeamId: 'etoile',   awayTeamId: 'ouragan',   homeScore: 66, awayScore: 61 },
-  { id: 'lm3', date: '2025-12-20', homeTeamId: 'kalinago', awayTeamId: 'soufriere', homeScore: 88, awayScore: 81 },
-  { id: 'lm4', date: '2025-11-15', homeTeamId: 'requins',  awayTeamId: 'etoile',    homeScore: 69, awayScore: 72 },
-  { id: 'lm5', date: '2025-10-30', homeTeamId: 'ouragan',  awayTeamId: 'zandoli',   homeScore: 73, awayScore: 69 },
-  { id: 'lm6', date: '2025-12-05', homeTeamId: 'etoile',   awayTeamId: 'zandoli',   homeScore: 70, awayScore: 64 },
-  { id: 'lm7', date: '2025-12-18', homeTeamId: 'requins',  awayTeamId: 'ouragan',   homeScore: 77, awayScore: 73 },
-  { id: 'lm8', date: '2026-01-12', homeTeamId: 'kalinago', awayTeamId: 'etoile',    homeScore: 91, awayScore: 88 },
-  { id: 'lm9', date: '2025-11-25', homeTeamId: 'soufriere', awayTeamId: 'kalinago', homeScore: 79, awayScore: 85 },
-  { id: 'lm10', date: '2025-10-15', homeTeamId: 'soufriere', awayTeamId: 'requins', homeScore: 68, awayScore: 75 },
-  { id: 'lm11', date: '2025-11-08', homeTeamId: 'zandoli',  awayTeamId: 'kalinago', homeScore: 72, awayScore: 80 },
-  { id: 'lm12', date: '2026-01-25', homeTeamId: 'ouragan',  awayTeamId: 'soufriere', homeScore: 70, awayScore: 66 },
-  ...(() => {
-    // Calendrier généré pour les 13 clubs restants du répertoire : chaque
-    // club joue 4 matchs (deux tournées de rencontres), scores et dates
-    // tirés de façon déterministe plutôt que saisis à la main un par un.
-    const ids = [
-      'carbet', 'ducos', 'goodluck', 'intrepide', 'usacfloreal', 'waks', 'aiglenoir',
-      'aiglon', 'sportinglamentin', 'blackstars', 'gauloise', 'larel', 'vauclinois',
-    ];
-    const n = ids.length;
-    const pairs = [];
-    for (let i = 0; i < n; i++) pairs.push([i, (i + 1) % n]);
-    for (let i = 0; i < n; i++) pairs.push([i, (i + 2) % n]);
-    const startDate = new Date('2025-10-08T00:00:00Z');
-    return pairs.map((pair, idx) => {
-      const id = `x${idx + 1}`;
-      const homeTeamId = ids[pair[0]];
-      const awayTeamId = ids[pair[1]];
-      const rand = mulberry32(strHash(id + '-score'));
-      let homeScore = 58 + Math.round(rand() * 32);
-      let awayScore = 58 + Math.round(rand() * 32);
-      if (homeScore === awayScore) homeScore += 1;
-      const d = new Date(startDate.getTime() + idx * 4 * 24 * 3600 * 1000);
-      const date = d.toISOString().slice(0, 10);
-      return { id, date, homeTeamId, awayTeamId, homeScore, awayScore };
-    });
-  })(),
-
-  // Matchs à venir (pas encore joués — pas de score) pour les 7 clubs
-  // d'origine, afin d'illustrer le calendrier avant/après.
-  { id: 'uc1', date: '2026-02-07', homeTeamId: 'trident',   awayTeamId: 'zandoli' },
-  { id: 'uc2', date: '2026-02-08', homeTeamId: 'etoile',    awayTeamId: 'ouragan' },
-  { id: 'uc3', date: '2026-02-14', homeTeamId: 'requins',   awayTeamId: 'kalinago' },
-  { id: 'uc4', date: '2026-02-15', homeTeamId: 'soufriere', awayTeamId: 'trident' },
-  { id: 'uc5', date: '2026-02-21', homeTeamId: 'zandoli',   awayTeamId: 'requins' },
-  { id: 'uc6', date: '2026-02-22', homeTeamId: 'ouragan',   awayTeamId: 'kalinago' },
-  { id: 'uc7', date: '2026-02-28', homeTeamId: 'etoile',    awayTeamId: 'soufriere' },
-
-  // Matchs à venir pour les 13 clubs générés (une 3e tournée, toujours sans score).
-  ...(() => {
-    const ids = [
-      'carbet', 'ducos', 'goodluck', 'intrepide', 'usacfloreal', 'waks', 'aiglenoir',
-      'aiglon', 'sportinglamentin', 'blackstars', 'gauloise', 'larel', 'vauclinois',
-    ];
-    const n = ids.length;
-    const pairs = [];
-    for (let i = 0; i < n; i++) pairs.push([i, (i + 3) % n]);
-    const startDate = new Date('2026-02-02T00:00:00Z');
-    return pairs.map((pair, idx) => {
-      const id = `u${idx + 1}`;
-      const homeTeamId = ids[pair[0]];
-      const awayTeamId = ids[pair[1]];
-      const d = new Date(startDate.getTime() + idx * 3 * 24 * 3600 * 1000);
-      const date = d.toISOString().slice(0, 10);
-      return { id, date, homeTeamId, awayTeamId };
-    });
-  })(),
-
-  // Calendrier généré pour les 10 clubs de la compétition féminine : deux
-  // tournées jouées avec score, une troisième à venir sans score.
-  ...(() => {
-    const ids = [
-      'madingrey', 'mucbasket', 'redant', 'twenty4', 'intrepide-f',
-      'etoile-f', 'ouragan-f', 'kalinago-f', 'zandoli-f', 'usacfloreal-f',
-    ];
-    const n = ids.length;
-    const played = [];
-    for (let i = 0; i < n; i++) played.push([i, (i + 1) % n]);
-    for (let i = 0; i < n; i++) played.push([i, (i + 2) % n]);
-    const startDate = new Date('2025-10-10T00:00:00Z');
-    const playedFixtures = played.map((pair, idx) => {
-      const id = `fp${idx + 1}`;
-      const homeTeamId = ids[pair[0]];
-      const awayTeamId = ids[pair[1]];
-      const rand = mulberry32(strHash(id + '-score'));
-      let homeScore = 52 + Math.round(rand() * 30);
-      let awayScore = 52 + Math.round(rand() * 30);
-      if (homeScore === awayScore) homeScore += 1;
-      const d = new Date(startDate.getTime() + idx * 4 * 24 * 3600 * 1000);
-      const date = d.toISOString().slice(0, 10);
-      return { id, date, homeTeamId, awayTeamId, homeScore, awayScore };
-    });
-
-    const upcomingPairs = [];
-    for (let i = 0; i < n; i++) upcomingPairs.push([i, (i + 3) % n]);
-    const upcomingStart = new Date('2026-02-05T00:00:00Z');
-    const upcomingFixtures = upcomingPairs.map((pair, idx) => {
-      const id = `fu${idx + 1}`;
-      const homeTeamId = ids[pair[0]];
-      const awayTeamId = ids[pair[1]];
-      const d = new Date(upcomingStart.getTime() + idx * 3 * 24 * 3600 * 1000);
-      const date = d.toISOString().slice(0, 10);
-      return { id, date, homeTeamId, awayTeamId };
-    });
-
-    return [...playedFixtures, ...upcomingFixtures];
-  })(),
+  ...buildDivisionFixtures(
+    ['etoile', 'requins', 'kalinago', 'carbet', 'ducos', 'usacfloreal', 'waks', 'aiglenoir', 'blackstars', 'gauloise'],
+    'r1m', '2025-10-08T00:00:00Z', '2026-02-02T00:00:00Z'
+  ),
+  ...buildDivisionFixtures(
+    ['trident', 'intrepide', 'goodluck', 'zandoli', 'aiglon', 'soufriere', 'sportinglamentin', 'larel', 'vauclinois', 'ouragan'],
+    'r2m', '2025-10-09T00:00:00Z', '2026-02-03T00:00:00Z'
+  ),
+  ...buildDivisionFixtures(
+    ['madingrey', 'mucbasket', 'redant', 'twenty4', 'intrepide-f', 'etoile-f', 'ouragan-f', 'kalinago-f', 'zandoli-f', 'usacfloreal-f'],
+    'r1f', '2025-10-10T00:00:00Z', '2026-02-05T00:00:00Z', [52, 82]
+  ),
 ];
 
 // Construit, pour un club donné, la liste de ses matchs avec les stats de
@@ -2957,14 +2894,14 @@ export default function App() {
         }
         .p4t-section-count { color: var(--ink-dim); font-size: 12.5px; }
 
-        .p4t-team-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; }
+        .p4t-team-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
         .p4t-team-card {
           display: flex; align-items: center; gap: 12px; text-align: left; background: var(--panel);
           border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; transition: border-color .15s, transform .15s;
         }
         .p4t-team-card:hover { border-color: var(--red); transform: translateY(-2px); }
         .p4t-team-card-info { flex: 1; min-width: 0; }
-        .p4t-team-card-name { font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .p4t-team-card-name { font-size: 14px; font-weight: 600; line-height: 1.25; }
         .p4t-team-card-loc { font-size: 11.5px; color: var(--ink-dim); margin-top: 2px; }
         .p4t-team-card-tag { font-size: 10.5px; color: var(--ink-dim); white-space: nowrap; flex-shrink: 0; }
         .p4t-team-card-tag-active { color: var(--red); font-weight: 600; }
